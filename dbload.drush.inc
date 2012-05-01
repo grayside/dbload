@@ -5,7 +5,7 @@
  */
 
 /**
- * Implementation of hook_drush_command().
+ * Implements hook_drush_command().
  */
 function dbload_drush_command() {
   $items = array();
@@ -17,49 +17,57 @@ function dbload_drush_command() {
       'client' => 'Grab a database related to the specified client.',
     ),
     'options' => array(
-      'server' => 'Server holding the data.',
-      'remote-user' => 'Optional, your username for the server or service hosting the database.',
-      'remote-path' => 'Path to the database file.',
-      'destination' => 'The local path where database dumps are stashed.',
-      'no-refresh-limit' => 'The database will normally be re-downloaded only once per day. Use this flag to force download.',
+      'destination' => 'The local path where database dumps are stashed. Defaults to /tmp.',
+      'force-refresh' => 'The database will normally be re-downloaded only once per day. Use this flag to force download.',
+      'connection' => 'Connection settings for database retrieval.',
+    ),
+    'sub-options' => array(
+      'connection' => array(
+        'server' => 'Server holding the data.',
+        'remote-user' => 'Optional, your username for the server or service hosting the database.',
+        'remote-path' => 'Path to the database file.',
+      ),
     ),
     'bootstrap' => 'DRUSH_BOOTSTRAP_DRUSH',
-    'aliases' => array('dbload', 'db-load', 'dbl'),
+    'aliases' => array('dbload', 'dbl'),
   );
 
   return $items;
 }
 
 /**
- * Implementation of hook_drush_help()
+ * Implements hook_drush_help()
  */
 function dbload_drush_help($section) {
   switch ($section) {
     case 'drush:database-load':
-      return file_get_contents(dirname(__FILE__) . '/README.txt');
-    case 'error:DBLOAD_NO_DB_OPTIONS':
-      return dt('No database options could be found. Remote host may be unavailable.');
+      return file_get_contents(dirname(__FILE__) . '/README.md');
+    case 'error:DBLOAD_NO_SERVER':
+      return dt('Failed to specify a valid host.');
+    case 'error:DBLOAD_NO_REMOTE_PATH':
+      return dt('Failed to specify a valid remote path.');
   }
 }
 
 /**
- * Implementation of drush_hook_COMMAND() for database-load.
+ * Implements drush_hook_COMMAND_validate() for database-load.
+ */
+function drush_dbload_database_load_validate($db = NULL) {
+  if (!drush_get_option('server', FALSE)) {
+    drush_set_error('DBLOAD_NO_SERVER');
+  }
+  if (!drush_get_option('remote-path', FALSE)) {
+    drush_set_error('DBLOAD_NO_REMOTE_PATH');
+  }
+}
+
+/**
+ * Implements drush_hook_COMMAND() for database-load.
  */
 function drush_dbload_database_load($db = NULL) {
   $args['server'] = drush_get_option('server', NULL);
   $args['remote-path'] = drush_get_option('remote-path', NULL);
   $args['destination'] = drush_get_option('destination', '/tmp');
-
-  $error = FALSE;
-  foreach ($args as $name => $arg) {
-    if (is_null($arg)) {
-      drush_set_error('DRUSH_MISSING_OPTION', dt('Missing the !arg argument.', array('!arg' => $name)));
-      $error = TRUE;
-    }
-  }
-  if ($error) {
-    return FALSE;
-  }
   $args['remote-user'] = drush_get_option('remote-user', NULL);
 
   if (is_null($db) || !array_key_exists($db, _dbload_db_list($args))) {
@@ -69,25 +77,32 @@ function drush_dbload_database_load($db = NULL) {
     }
     $db = drush_choice(_dbload_db_list($args));
   }
-
-  // Cancelled state reached.
+  // Valid DB not found or user cancelled operation.
   if (!$db) {
     return FALSE;
   }
  
-  drush_print('Initiating database retrieval. Please hold.');
+  drush_log('Retrieving the selected database...', 'status');
   $db_path = dbload_retrieve_database($db, $args);
-
   if (!$db_path) {
     return FALSE;
   }
-
-  if (drush_confirm(dt('Load the latest dump for !db into the database?', array('!db' => $db)))) {
-    drush_shell_exec("drush -yd sql-drop");
-    drush_shell_exec("drush sql-cli 2> /dev/null < {$db_path}");
-  }
-  else {
-    return FALSE;
+  drush_log('Database downloaded.', 'success');
+  drush_log(dt('Database !db downloaded to !path', array(
+    '!db' => $db,
+    '!path' => $db_path,
+  )));
+     
+  if (drush_has_boostrapped(DRUSH_BOOTSTRAP_DRUPAL_DATABASE) || drush_bootstrap(DRUSH_BOOTSTRAP_DRUPAL_DATABASE)) {
+    if (drush_confirm(dt('Load the latest dump for !db into the database?', array('!db' => $db)))) {
+      drush_log('Loading data into database.', 'status');
+      drush_invoke_process('@self', 'sql-drop', array(), array('y'));
+      drush_shell_exec("drush sql-cli 2> /dev/null < {$db_path}");
+    }
+    
+    if (drush_confirm('Run updatedb?')) {
+      drush_invoke_process('@self', 'updatedb', array(), array('y'));
+    }
   }
 }
 
@@ -108,12 +123,12 @@ function dbload_retrieve_database($db, $args) {
   $filename = "prod-{$db}-{$date}.sql";
   $filepath = $args['destination'] . '/' . $filename;
 
-  if (drush_get_option('no-refresh-limit', FALSE) || !file_exists($filepath)) {
+  if (drush_get_option('force-refresh', FALSE) || !file_exists($filepath)) {
     drush_mkdir($args['destination']);
-    drush_shell_exec("scp {$args['remote-user']}@{$args['server']}:{$args['remote-path']}/{$db}-safe.sql {$filepath} 2> /dev/null");
+    drush_shell_exec("rsync -acz {$args['remote-user']}@{$args['server']}:{$args['remote-path']}/{$db}-safe.sql {$filepath} 2> /dev/null");
   }
   else {
-    drush_print("Database cached on disk. To retrieve a fresh copy rerun with '--no-refresh-limit'.");
+    drush_print("Database cached on disk. To retrieve a fresh copy rerun with '--force-refresh'.");
   }
   
   if (!file_exists($filepath)) {
@@ -136,21 +151,21 @@ function dbload_retrieve_database($db, $args) {
 function _dbload_db_list($args, $reset = FALSE) {
   static $dbs;
 
-  if (!empty($dbs) || $reset) {
+  if (!empty($dbs) && !$reset) {
     return $dbs;
   }
 
   $date = date('Y-m-d');
   $index = $args['destination'] . "/prod-index-{$date}.dat";
- 
-  if (drush_get_option('no-refresh-limit', FALSE) || !file_exists($index)) {
+
+  if (drush_get_option('force-refresh', FALSE) || !file_exists($index)) {
     drush_mkdir($args['destination']);
 
     $remote_user = $args['remote-user'] === NULL ? '' : "{$args['remote-user']}@";
-
-    drush_shell_exec("ssh {$remote_user}{$args['server']} 'ls *sql {$args['remote-path']}' 2> /dev/null");
-
+    $cmd = "ssh {$remote_user}{$args['server']} 'ls *sql {$args['remote-path']}' 2> /dev/null";
+    drush_shell_exec($cmd);
     $dbs = drush_shell_exec_output();
+
     $output = '';
     foreach ($dbs as $db) {
       if (preg_match('/(.*)\-safe\.sql$/S', $db, $match)) {
