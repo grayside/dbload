@@ -46,6 +46,8 @@ function dbload_drush_help($section) {
       return dt('Failed to specify a valid host.');
     case 'error:DBLOAD_NO_REMOTE_PATH':
       return dt('Failed to specify a valid remote path.');
+    case 'error:DBLOAD_NO_DB_OPTIONS':
+      return dt('Could not find any available databases. Are you connected to the network?');
   }
 }
 
@@ -70,9 +72,9 @@ function drush_dbload_database_load($db = NULL) {
   $args['destination'] = drush_get_option('destination', '/tmp');
   $args['remote-user'] = drush_get_option('remote-user', NULL);
 
-  if (is_null($db) || !array_key_exists($db, _dbload_db_list($args))) {
+  if ($db == NULL || !array_key_exists($db, _dbload_db_list($args))) {
     $options = _dbload_db_list($args);
-    if (count($options) == 0) {
+    if (empty($options)) {
       return drush_set_error('DBLOAD_NO_DB_OPTIONS');
     }
     $db = drush_choice(_dbload_db_list($args));
@@ -166,7 +168,7 @@ function _dbload_db_list($args, $reset = FALSE) {
     drush_shell_exec($cmd);
     $dbs = drush_shell_exec_output();
 
-    $output = '';
+    $output = array();
     foreach ($dbs as $db) {
       if (preg_match('/(.*)\-safe\.sql$/S', $db, $match)) {
         $output[$match[1]] = $match[1];
@@ -174,13 +176,14 @@ function _dbload_db_list($args, $reset = FALSE) {
     }
     $dbs = $output;
     if (count($dbs)) {
+      $output = array_filter($output);
       $output = implode("\n", $output);
       file_put_contents($index, $output);
     }
     return $dbs;
   }
 
-  $items = explode("\n", file_get_contents($index));
+  $items = explode("\n", @file_get_contents($index));
   $dbs = array();
   foreach ($items as $db) {
     $dbs[$db] = $db;
