@@ -125,7 +125,7 @@ function dbload_retrieve_database($db, $args) {
 
   $filepath = $args['destination'] . '/' . $filename;
 
-  if (drush_get_option('force-refresh', FALSE) || !file_exists($filepath)) {
+  if (drush_get_option('force-refresh', FALSE) || !file_exists($filepath) || !_dbload_is_cached($filepath)) {
     drush_mkdir($args['destination']);
     drush_shell_exec("rsync -acz {$args['remote-user']}@{$args['server']}:{$args['remote-path']}/{$db}-safe.sql {$filepath} 2> /dev/null");
     drush_log(dt('Database from !datestamp downloaded for !customer.', array(
@@ -170,7 +170,7 @@ function _dbload_db_list($args, $reset = FALSE) {
   $id = md5($cmd);
   $index = $args['destination'] . "/dbload-index-{$cmd}.dat";
 
-  if (drush_get_option('force-refresh', FALSE) || !_dbload_is_cached($index)) {
+  if (drush_get_option('force-refresh', FALSE) || !file_exists($index) || !_dbload_is_cached($index)) {
     drush_mkdir($args['destination']);
     drush_shell_exec($cmd);
     $dbs = drush_shell_exec_output();
