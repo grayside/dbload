@@ -95,7 +95,7 @@ function drush_dbload_database_load($db = NULL) {
     '!path' => $db_path,
   )), 'status');
      
-  if (drush_has_boostrapped(DRUSH_BOOTSTRAP_DRUPAL_DATABASE) || drush_bootstrap(DRUSH_BOOTSTRAP_DRUPAL_DATABASE)) {
+  if (drush_has_boostrapped(DRUSH_BOOTSTRAP_DRUPAL_DATABASE)) {
     if (drush_confirm(dt('Load the latest dump for !db into the database?', array('!db' => $db)))) {
       drush_log('Loading data into database.', 'status');
       drush_invoke_process('@self', 'sql-drop', array(), array('y'));
@@ -168,7 +168,7 @@ function _dbload_db_list($args, $reset = FALSE) {
 
   // Create a unique manifest file for each set of server connection information.
   $id = md5($cmd);
-  $index = $args['destination'] . "/dbload-index-{$cmd}.dat";
+  $index = $args['destination'] . "/dbload-index-{$id}.dat";
 
   if (drush_get_option('force-refresh', FALSE) || !file_exists($index) || !_dbload_is_cached($index)) {
     drush_mkdir($args['destination']);
@@ -218,7 +218,7 @@ function _dbload_write_manifest($filename, $dbs, $additional) {
     'dbs' => $dbs,
   ) + $additional;
 
-  return file_put_contents($index, drush_json_encode($data));
+  return file_put_contents($filename, drush_json_encode($data));
 }
 
 /**
@@ -231,7 +231,11 @@ function _dbload_write_manifest($filename, $dbs, $additional) {
  *   Array of database names keyed on their values.
  */
 function _dbload_read_manifest($filename) {
-  $data = drush_json_decode(@file_get_contents($filename));
+  $data = @file_get_contents($filename);
+  if (empty($data)) {
+    return array();
+  }
+  $data = drush_json_decode($data);
   return $data['dbs'];
 }
 
@@ -252,7 +256,16 @@ function _dbload_read_manifest($filename) {
  * @return boolean
  */
 function _dbload_is_cached($filename) {
-  return filemtime($filename) < strtotime('today');
+  $mtime = filemtime($filename);
+  $today = strtotime('today');
+
+  drush_log(dt('Checking the status of `!file`.', array('!file' => $index)), 'debug');
+  drush_log(dt("File Modified Time: !mtime; Today's Timestamp: !datestamp", array(
+    '!mtime' => $mtime,
+    '!datestamp' => $today,
+  )), 'debug');
+
+  return $mtime > $today;
 }
 
 /**
@@ -264,5 +277,5 @@ function _dbload_is_cached($filename) {
  * @return string
  */
 function dbload_db_mtime($filepath) {
-  return date ("F d Y H:i:s.", filemtime($filename));
+  return date ("F d Y H:i:s.", filemtime($filepath));
 }
