@@ -17,7 +17,7 @@ function dbload_drush_command() {
       'client' => 'Grab a database related to the specified client.',
     ),
     'options' => array(
-      'destination' => 'The local path where database dumps are stashed. Defaults to /tmp.',
+      'destination' => 'The local path where database dumps are stashed.',
       'force-refresh' => 'The database will normally be re-downloaded only once per day. Use this flag to force download.',
       'connection' => 'Connection settings for database retrieval.',
     ),
@@ -69,7 +69,7 @@ function drush_dbload_database_load_validate($db = NULL) {
 function drush_dbload_database_load($db = NULL) {
   $args['server'] = drush_get_option('server', NULL);
   $args['remote-path'] = drush_get_option('remote-path', NULL);
-  $args['destination'] = drush_get_option('destination', '/tmp');
+  $args['destination'] = drush_get_option('destination', drush_directory_cache('dbload'));
   $args['remote-user'] = drush_get_option('remote-user', NULL);
 
   if ($db == NULL || !array_key_exists($db, _dbload_db_list($args))) {
