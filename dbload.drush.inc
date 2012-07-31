@@ -89,22 +89,23 @@ function drush_dbload_database_load($db = NULL) {
   if (!$db_path) {
     return FALSE;
   }
-  drush_log(dt('Database !db from !date ready at !path.', array(
+  drush_log(dt('Database "!db" from !date ready at !path.', array(
     '!db' => $db,
     '!date' => dbload_db_mtime($db_path),
     '!path' => $db_path,
   )), 'status');
-     
-  if (drush_has_boostrapped(DRUSH_BOOTSTRAP_DRUPAL_DATABASE)) {
-    if (drush_confirm(dt('Load the latest dump for !db into the database?', array('!db' => $db)))) {
-      drush_log('Loading data into database.', 'status');
-      drush_invoke_process('@self', 'sql-drop', array(), array('y'));
-      drush_shell_exec("drush sql-cli 2> /dev/null < {$db_path}");
-    }
+
+  if (drush_confirm(dt('Load the latest dump for !db into the database?', array('!db' => $db)))) {
+    drush_log('Loading data into database.', 'status');
+    drush_invoke_process('@self', 'sql-drop', array(), array('y'));
+    drush_shell_exec("drush sql-cli 2> /dev/null < {$db_path}");
+  }
+  if (drush_confirm('Run updatedb?')) {
+    drush_invoke_process('@self', 'updatedb', array(), array('y'));
+  }
+  if (drush_confirm('Download site files?')
+      && drush_bootstrap('DRUSH_BOOTSTRAP_DRUPAL_FULL')) {
     
-    if (drush_confirm('Run updatedb?')) {
-      drush_invoke_process('@self', 'updatedb', array(), array('y'));
-    }
   }
 }
 
@@ -140,6 +141,7 @@ function dbload_retrieve_database($db, $args) {
   if (!file_exists($filepath)) {
     return drush_set_error('DRUSH_DB_RETRIEVAL_FAIL', dt('Could not find the !db database.', array('!db' => $db)));
   }
+
   return $filepath;
 }
 
@@ -277,5 +279,5 @@ function _dbload_is_cached($filename) {
  * @return string
  */
 function dbload_db_mtime($filepath) {
-  return date ("F d Y H:i:s.", filemtime($filepath));
+  return date ("F d Y H:i:s", filemtime($filepath));
 }
