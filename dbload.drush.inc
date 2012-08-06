@@ -95,6 +95,10 @@ function drush_dbload_database_load($db = NULL) {
     '!path' => $db_path,
   )), 'status');
 
+  if (drush_confirm('Download site files?') && drush_get_option('remote-files', FALSE)
+      && drush_bootstrap(DRUSH_BOOTSTRAP_DRUPAL_FULL)) {
+    dbload_retrieve_site_files($db, $args);    
+  }
   if (drush_confirm(dt('Load the latest dump for !db into the database?', array('!db' => $db)))) {
     drush_log('Loading data into database.', 'status');
     drush_invoke_process('@self', 'sql-drop', array(), array('y'));
@@ -102,10 +106,6 @@ function drush_dbload_database_load($db = NULL) {
   }
   if (drush_confirm('Run updatedb?')) {
     drush_invoke_process('@self', 'updatedb', array(), array('y'));
-  }
-  if (drush_confirm('Download site files?')
-      && drush_bootstrap('DRUSH_BOOTSTRAP_DRUPAL_FULL')) {
-    
   }
 }
 
@@ -141,6 +141,35 @@ function dbload_retrieve_database($db, $args) {
   if (!file_exists($filepath)) {
     return drush_set_error('DRUSH_DB_RETRIEVAL_FAIL', dt('Could not find the !db database.', array('!db' => $db)));
   }
+
+  return $filepath;
+}
+
+/**
+ * Replace the existing files directory with one from the remote server.
+ *
+ * @param $db
+ *  The specific database variant to target for database retrieval.
+ * @param $args
+ *  The sanitized args to use to download the database, if needed.
+ *
+ * @return String
+ *   Path to the local destination.
+ */
+function dbload_retrieve_site_files($db, $args) {
+  $remote_files = drush_get_option('remote-files', FALSE) . '/*';
+  // Simple token replacement in case the remote files path is "creative".
+  $remote_files = str_replace('{db}', $db, $remote_files);
+
+  if (drush_drupal_major_version() < 7) {
+    $filepath = drush_get_context('DRUSH_SELECTED_DRUPAL_ROOT') . '/' . file_directory_path();
+  }
+  else {
+    $filepath = drupal_realpath(file_default_scheme() . '://');
+  }
+
+  drush_delete_dir($file_path . '/*');
+  drush_shell_exec("rsynch -aczR {$args['remote-user']}@{$args['server']}:{$remote_files} {$filepath} 2> /dev/null");
 
   return $filepath;
 }
@@ -281,3 +310,4 @@ function _dbload_is_cached($filename) {
 function dbload_db_mtime($filepath) {
   return date ("F d Y H:i:s", filemtime($filepath));
 }
+
