@@ -128,7 +128,8 @@ function dbload_retrieve_database($db, $args) {
 
   if (drush_get_option('force-refresh', FALSE) || !file_exists($filepath) || !_dbload_is_cached($filepath)) {
     drush_mkdir($args['destination']);
-    drush_shell_exec("rsync -acz {$args['remote-user']}@{$args['server']}:{$args['remote-path']}/{$db}-safe.sql {$filepath} 2> /dev/null");
+    $remote_path = str_replace('{db}', $db, $args['remote-path']);
+    drush_shell_exec("rsync -acz {$args['remote-user']}@{$args['server']}:{$remote_path}/{$db}-safe.sql {$filepath} 2> /dev/null");
     drush_log(dt('Database from !datestamp downloaded for !customer.', array(
       '!datestamp' => dbload_db_mtime($filepath),
       '!db' => $db,
