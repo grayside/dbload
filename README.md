@@ -31,3 +31,15 @@ database import.
 
 Implement drush_hook_post_database_load() to make tweaks to the database after 
 loading, such as resetting the user/1 password.
+
+If you want to make it optional, use something like the following:
+```php
+/**
+ * Implementation of drush_hook_post_COMMAND() for database-load.
+ */
+function drush_example_post_database_load() {
+  if (drush_confirm('Update the password of user/1?')) {
+    drush_invoke_process('@self', 'user-password', array('admin'), array('y', 'password' => 'example'));
+  }
+}
+```
