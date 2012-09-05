@@ -172,7 +172,7 @@ function dbload_retrieve_site_files($db, $args) {
   }
 
   drush_delete_dir($file_path . '/*');
-  drush_shell_exec("rsynch -aczR {$remote_user}{$args['server']}:{$remote_files} {$filepath} 2> /dev/null");
+  drush_shell_exec("rsync -aczR {$remote_user}{$args['server']}:{$remote_files} {$filepath} 2> /dev/null");
 
   return $filepath;
 }
