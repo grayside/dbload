@@ -129,7 +129,8 @@ function dbload_retrieve_database($db, $args) {
   if (drush_get_option('force-refresh', FALSE) || !file_exists($filepath) || !_dbload_is_cached($filepath)) {
     drush_mkdir($args['destination']);
     $remote_path = str_replace('{db}', $db, $args['remote-path']);
-    drush_shell_exec("rsync -acz {$args['remote-user']}@{$args['server']}:{$remote_path}/{$db}-safe.sql {$filepath} 2> /dev/null");
+    $remote_user = isset($args['remote-user']) ? $args['remote-user'] . '@' : '';
+    drush_shell_exec("rsync -acz {$remote_user}{$args['server']}:{$remote_path}/{$db}-safe.sql {$filepath} 2> /dev/null");
     drush_log(dt('Database from !datestamp downloaded for !customer.', array(
       '!datestamp' => dbload_db_mtime($filepath),
       '!db' => $db,
@@ -161,6 +162,7 @@ function dbload_retrieve_site_files($db, $args) {
   $remote_files = drush_get_option('remote-files', FALSE) . '/*';
   // Simple token replacement in case the remote files path is "creative".
   $remote_files = str_replace('{db}', $db, $remote_files);
+  $remote_user = isset($args['remote-user']) ? $args['remote-user'] . '@' : '';
 
   if (drush_drupal_major_version() < 7) {
     $filepath = drush_get_context('DRUSH_SELECTED_DRUPAL_ROOT') . '/' . file_directory_path();
@@ -170,7 +172,7 @@ function dbload_retrieve_site_files($db, $args) {
   }
 
   drush_delete_dir($file_path . '/*');
-  drush_shell_exec("rsynch -aczR {$args['remote-user']}@{$args['server']}:{$remote_files} {$filepath} 2> /dev/null");
+  drush_shell_exec("rsynch -aczR {$remote_user}{$args['server']}:{$remote_files} {$filepath} 2> /dev/null");
 
   return $filepath;
 }
