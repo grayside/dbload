@@ -48,6 +48,8 @@ function dbload_drush_help($section) {
       return dt('Failed to specify a valid remote path.');
     case 'error:DBLOAD_NO_DB_OPTIONS':
       return dt('Could not find any available databases. Are you connected to the network?');
+    case 'error:DBLOAD_UNABLE_DELETE_FILE':
+      return dt('Could not delete the local file in the files directory.');
   }
 }
 
@@ -170,11 +172,49 @@ function dbload_retrieve_site_files($db, $args) {
   else {
     $filepath = drupal_realpath(file_default_scheme() . '://');
   }
+  if (($delete = drush_get_option('delete-local-files', array())) && drush_confirm('Delete configured local files?')) {
+    foreach ($delete as $file_name) {
+      if (_dbload_drush_delete_dir($filepath . '/' . $file_name)) {
+        drush_log(dt('Deleted local file @file', array('@file' => $filepath . '/' . $file_name)));
+      }
+      else {
+        drush_set_error('DBLOAD_UNABLE_DELETE_FILE', dt('Deleted local file @file', array('@file' => $filepath . '/' . $file_name)));
+      }
+    }
+  }
 
-  drush_delete_dir($file_path . '/*');
-  drush_shell_exec("rsync -aczR {$remote_user}{$args['server']}:{$remote_files} {$filepath} 2> /dev/null");
+  $exclude_line = '';
+  if ($exclude = drush_get_option('ignore-remote-files', array())) {
+    $exclude_line = '--exclude \'' . implode('\' --exclude \'', $exclude) . '\'';
+  }
+  drush_shell_exec("rsync -aczR $exclude_line {$remote_user}{$args['server']}:{$remote_files} {$filepath} 2> /dev/null");
 
   return $filepath;
+}
+
+/**
+ * Allows for /* in filepath
+ *
+ * @see drush_delete_dir().
+ */
+function _dbload_drush_delete_dir($path) {
+  if (strpos($path, '/*') == strlen($path) - 2) {
+    $path = substr($path, 0, strlen($path) -2);
+    if (file_exists($path)) {
+      foreach (scandir($path) as $item) {
+        if ($item == '.' || $item == '..') {
+          continue;
+        }
+        if (!drush_delete_dir($path . '/' . $item)) {
+          return FALSE;
+        }
+      }
+    }
+    return TRUE;
+  }
+  else {
+    return drush_delete_dir($path);
+  }
 }
 
 /**

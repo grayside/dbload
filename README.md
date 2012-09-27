@@ -25,6 +25,8 @@ database import.
 
 ~~~
     $command_specific['database-load']['remote-user'] = 'my-remote-account';
+    $command_specific['database-load']['delete-local-files'] = array('css');
+    $command_specific['database-load']['ignore-remote-files'] = array('css', 'js');
 ~~~
 
 ## Customization
